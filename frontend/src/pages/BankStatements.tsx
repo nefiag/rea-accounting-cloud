@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import { Card, Upload, Button, Table, Tag, Select, Switch, Space, message, Tooltip } from 'antd';
 import { UploadOutlined, ThunderboltOutlined, RobotOutlined, SyncOutlined } from '@ant-design/icons';
 import { api } from '../api';
@@ -15,7 +15,11 @@ export const BankStatements: React.FC<{
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [mergeMode, setMergeMode] = useState<'ONE_TO_ONE' | 'MERGE_BY_CATEGORY' | 'MERGE_ALL'>('ONE_TO_ONE');
 
-  const leafAccounts = accounts.filter((a) => a.is_leaf);
+  // 批量多选防抖队列：将一次框选的多份对账单合并为一个请求提交以实现跨文件互转去重
+  const pendingFilesRef = useRef<File[]>([]);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const leafAccounts = accounts.filter((a) => a.is_leaf !== false);
   const defaultBankId = bankAccounts[0]?.id;
 
   const fetchStatements = async () => {
@@ -32,25 +36,46 @@ export const BankStatements: React.FC<{
     fetchStatements();
   }, [accountSetId]);
 
-  const handleUpload = async (options: any) => {
+  const flushBatchUpload = async () => {
+    const batchFiles = [...pendingFilesRef.current];
+    pendingFilesRef.current = [];
+    if (!batchFiles.length) return;
+
     const formData = new FormData();
     formData.append('account_set_id', accountSetId);
     formData.append('bank_account_id', defaultBankId);
     formData.append('auto_generate_voucher', String(autoGenOnImport));
-    formData.append('file', options.file);
+    batchFiles.forEach((f) => {
+      formData.append('files', f);
+    });
 
     try {
-      message.loading({ content: 'AI Agent 正在解析对账单并标记业务要素...', key: 'imp' });
-      const res = await api.post('/statements/import', formData);
-      message.success({
-        content: `解析入库 ${res.data.parsed_count} 条流水，正向自动生成凭证 ${res.data.generated_vouchers_count} 张！`,
+      message.loading({
+        content: `AI Agent 正在批量解析 ${batchFiles.length} 份对账单并执行跨账户自动去重...`,
         key: 'imp',
+        duration: 0,
+      });
+      const res = await api.post('/statements/import-batch', formData);
+      const { files_count, parsed_count, dedup_skipped, generated_vouchers_count } = res.data;
+      message.success({
+        content: `批量处理 ${files_count} 份文件：新入库 ${parsed_count} 条，自动去重 ${dedup_skipped} 条，生成凭证 ${generated_vouchers_count} 张！`,
+        key: 'imp',
+        duration: 5,
       });
       fetchStatements();
-      if (res.data.generated_vouchers_count > 0) onVoucherGenerated();
+      if (generated_vouchers_count > 0) onVoucherGenerated();
     } catch (err: any) {
-      message.error({ content: err.response?.data?.detail || '解析失败', key: 'imp' });
+      message.error({ content: err.response?.data?.detail || err.message || '批量解析失败', key: 'imp' });
     }
+  };
+
+  const handleBeforeUpload = (file: File) => {
+    pendingFilesRef.current.push(file);
+    if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+    flushTimerRef.current = setTimeout(() => {
+      flushBatchUpload();
+    }, 120);
+    return false; // 阻止 antd 默认逐个文件独立上传，改由批量队列合并提交
   };
 
   const handleSubjectChange = async (statementId: string, newCode: string) => {
@@ -87,16 +112,21 @@ export const BankStatements: React.FC<{
       title={
         <Space>
           <RobotOutlined style={{ color: '#1677ff' }} />
-          <span>AI 智能银行对账单与双向凭证中心</span>
+          <span>AI 智能银行对账单与双向凭证中心（2024+ 批量去重版）</span>
         </Space>
       }
       extra={
         <Space wrap>
           <span>导入时立即正向制证：</span>
           <Switch checked={autoGenOnImport} onChange={setAutoGenOnImport} />
-          <Upload customRequest={handleUpload} showUploadList={false} accept=".xlsx,.xls,.csv,.pdf">
+          <Upload
+            multiple
+            beforeUpload={handleBeforeUpload}
+            showUploadList={false}
+            accept=".xlsx,.xls,.csv,.pdf"
+          >
             <Button type="primary" icon={<UploadOutlined />}>
-              上传对账单 (Excel/CSV/PDF)
+              批量上传对账单 (支持多选/自动去重)
             </Button>
           </Upload>
           <Select
@@ -125,9 +155,15 @@ export const BankStatements: React.FC<{
         loading={loading}
         dataSource={statements}
         rowSelection={{ selectedRowKeys, onChange: setSelectedRowKeys }}
-        size="small"
+                size="small"
+        pagination={{
+          defaultPageSize: 30,
+          showSizeChanger: true,
+          pageSizeOptions: ['10', '30', '50', '100'],
+          showTotal: (total) => `共 ${total} 条流水`,
+        }}
         columns={[
-          { title: '交易时间', dataIndex: 'tx_date', width: 155 },
+          { title: '凭证日期(月末)', dataIndex: 'tx_date', width: 155 },
           {
             title: '方向',
             dataIndex: 'direction',
@@ -138,19 +174,24 @@ export const BankStatements: React.FC<{
             title: '发生额',
             dataIndex: 'amount',
             width: 110,
-            render: (v) => <strong>{Number(v).toFixed(2)}</strong>,
+            render: (v) => (
+              <strong style={{ color: Number(v) < 0 ? '#cf1322' : undefined }}>
+                {Number(v).toFixed(2)}
+              </strong>
+            ),
           },
           { title: '对手方户名 (AI抽取)', dataIndex: 'counterparty_name', width: 180 },
           {
             title: 'AI 业务意图与标准化摘要',
-            width: 240,
+            width: 260,
             render: (_, r) => (
               <Space direction="vertical" size={2}>
-                <Space>
-                  <Tag color="purple">{r.ai_tags?.intent_category || 'OTHER'}</Tag>
+                <Space wrap>
+                  <Tag color="purple">{r.ai_tags?.biz_tag || r.ai_tags?.intent_category || 'GENERAL'}</Tag>
                   <Tag color="cyan">置信度 {(r.confidence_score * 100).toFixed(0)}%</Tag>
+                  {r.ai_tags?.is_red_ink && <Tag color="red">红字</Tag>}
                 </Space>
-                <Tooltip title={`原始摘要: ${r.raw_summary}`}>
+                <Tooltip title={`实际交易日: ${r.ai_tags?.actual_tx_date || ''} | 来源: ${r.ai_tags?.source_file || ''} | 原始摘要: ${r.raw_summary}`}>
                   <span style={{ fontSize: 12 }}>{r.ai_tags?.normalized_summary || r.raw_summary}</span>
                 </Tooltip>
               </Space>
@@ -162,8 +203,15 @@ export const BankStatements: React.FC<{
             width: 220,
             render: (code, r) => (
               <Select
-                size="small"
+                        size="small"
+        pagination={{
+          defaultPageSize: 30,
+          showSizeChanger: true,
+          pageSizeOptions: ['10', '30', '50', '100'],
+          showTotal: (total) => `共 ${total} 条流水`,
+        }}
                 showSearch
+                optionFilterProp="label"
                 value={code}
                 style={{ width: '100%' }}
                 onChange={(val) => handleSubjectChange(r.id, val)}
@@ -178,12 +226,24 @@ export const BankStatements: React.FC<{
               r.voucher_label ? (
                 <Space>
                   <Tag color="success">{r.voucher_label}</Tag>
-                  <Button type="link" size="small" onClick={() => handleReverseGenerate([r.id])}>
+                  <Button type="link"         size="small"
+        pagination={{
+          defaultPageSize: 30,
+          showSizeChanger: true,
+          pageSizeOptions: ['10', '30', '50', '100'],
+          showTotal: (total) => `共 ${total} 条流水`,
+        }} onClick={() => handleReverseGenerate([r.id])}>
                     重算
                   </Button>
                 </Space>
               ) : (
-                <Button type="link" size="small" onClick={() => handleReverseGenerate([r.id])}>
+                <Button type="link"         size="small"
+        pagination={{
+          defaultPageSize: 30,
+          showSizeChanger: true,
+          pageSizeOptions: ['10', '30', '50', '100'],
+          showTotal: (total) => `共 ${total} 条流水`,
+        }} onClick={() => handleReverseGenerate([r.id])}>
                   立即反向制证
                 </Button>
               ),
@@ -193,3 +253,5 @@ export const BankStatements: React.FC<{
     </Card>
   );
 };
+
+

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, UploadFile, File, Form, HTTPException
+﻿from fastapi import FastAPI, Depends, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import io
@@ -17,7 +17,8 @@ from .models import (
 )
 from .schemas import VoucherCreate, StatementTagUpdate, ReverseVoucherRequest
 from .services.ledger_service import create_voucher, get_trial_balance
-from .services.statement_agent import ingest_bank_statement_file
+from .services.report_service import build_category_summary, build_income_statement, build_balance_sheet, build_subsidiary_ledger, export_financial_statements_excel
+from .services.statement_agent import ingest_bank_statement_file, ingest_bank_statement_batch
 from .services.voucher_synthesis import synthesize_vouchers_from_statements
 from .services.migration_engine import (
     export_xiaokuaiji_compatible_excel,
@@ -309,3 +310,80 @@ async def api_import_xiaokuaiji(
 ):
     content = await file.read()
     return await import_xiaokuaiji_excel(db, account_set_id, content)
+@app.post("/api/v1/statements/import-batch")
+async def api_import_statements_batch(
+    account_set_id: str = Form(...),
+    bank_account_id: str = Form(...),
+    auto_generate_voucher: bool = Form(True),
+    confidence_threshold: float = Form(0.85),
+    files: list[UploadFile] = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    file_pairs = []
+    for f in files:
+        content = await f.read()
+        file_pairs.append((f.filename or "upload.xlsx", content))
+
+    batch_res = await ingest_bank_statement_batch(
+        db, account_set_id, bank_account_id, file_pairs
+    )
+    statements = batch_res["statements"]
+
+    generated_count = 0
+    if auto_generate_voucher and statements:
+        eligible_ids = [
+            s.id for s in statements if float(s.confidence_score) >= confidence_threshold
+        ]
+        if eligible_ids:
+            vouchers = await synthesize_vouchers_from_statements(
+                db, account_set_id, eligible_ids, merge_mode="ONE_TO_ONE"
+            )
+            generated_count = len(vouchers)
+
+    return {
+        "files_count": len(files),
+        "total_extracted": batch_res["total_extracted"],
+        "dedup_skipped": batch_res["dedup_skipped"],
+        "parsed_count": len(statements),
+        "generated_vouchers_count": generated_count,
+    }
+
+@app.get("/api/v1/reports/category-summary")
+async def api_category_summary(account_set_id: str, period: str, db: AsyncSession = Depends(get_db)):
+    return await build_category_summary(db, account_set_id, period)
+
+
+@app.get("/api/v1/reports/income-statement")
+async def api_income_statement(account_set_id: str, period: str, db: AsyncSession = Depends(get_db)):
+    return await build_income_statement(db, account_set_id, period)
+
+
+@app.get("/api/v1/reports/balance-sheet")
+async def api_balance_sheet(account_set_id: str, period: str, db: AsyncSession = Depends(get_db)):
+    return await build_balance_sheet(db, account_set_id, period)
+
+
+@app.get("/api/v1/reports/subsidiary-ledger")
+async def api_subsidiary_ledger(
+    account_set_id: str,
+    account_code: str,
+    start_period: str,
+    end_period: str,
+    db: AsyncSession = Depends(get_db),
+):
+    return await build_subsidiary_ledger(db, account_set_id, account_code, start_period, end_period)
+
+
+@app.get("/api/v1/reports/export-financial-excel")
+async def api_export_financial_excel(
+    account_set_id: str,
+    period: str,
+    detail_code: str = "1002",
+    db: AsyncSession = Depends(get_db),
+):
+    xlsx_bytes = await export_financial_statements_excel(db, account_set_id, period, detail_code)
+    return StreamingResponse(
+        io.BytesIO(xlsx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=financial_statements_{period}.xlsx"},
+    )

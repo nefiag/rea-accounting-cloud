@@ -1,15 +1,17 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { Layout, Menu, Tabs, Tag, Space, Table, Card } from 'antd';
 import {
   EditOutlined,
   BankOutlined,
   AccountBookOutlined,
   UnorderedListOutlined,
+  BarChartOutlined,
 } from '@ant-design/icons';
 import { api } from './api';
 import { VoucherEditor } from './pages/VoucherEditor';
 import { BankStatements } from './pages/BankStatements';
 import { TrialBalance } from './pages/TrialBalance';
+import { FinancialReports } from './pages/FinancialReports';
 
 const { Header, Sider, Content } = Layout;
 
@@ -60,6 +62,7 @@ export default function App() {
             { key: 'voucher_new', icon: <EditOutlined />, label: '录凭证' },
             { key: 'voucher_list', icon: <UnorderedListOutlined />, label: '查凭证' },
             { key: 'trial_balance', icon: <AccountBookOutlined />, label: '科目余额表' },
+            { key: 'financial_reports', icon: <BarChartOutlined />, label: '财务规范报表' },
           ]}
         />
       </Sider>
@@ -143,6 +146,18 @@ export default function App() {
                     period={period}
                     refreshKey={refreshTick}
                     onRefreshBootstrap={loadBootstrap}
+                  />
+                ),
+              },
+              {
+                key: 'financial_reports',
+                label: '财务规范报表',
+                children: (
+                  <FinancialReports
+                    accountSetId={setId}
+                    defaultPeriod={period}
+                    accounts={ctx.accounts}
+                    refreshKey={refreshTick}
                   />
                 ),
               },
