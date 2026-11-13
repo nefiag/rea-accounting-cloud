@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: rea_accounting_db
+    restart: always
+    environment:
+      POSTGRES_USER: rea_user
+      POSTGRES_PASSWORD: rea_password
+      POSTGRES_DB: rea_accounting
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rea_user -d rea_accounting"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: rea_accounting_backend
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rea_user:rea_password@db:5432/rea_accounting
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    container_name: rea_accounting_frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  pgdata:
