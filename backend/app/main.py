@@ -25,7 +25,7 @@ from .services.migration_engine import (
     import_xiaokuaiji_excel,
 )
 
-app = FastAPI(title="REA-Accounting-Cloud API", version="1.0.0")
+app = FastAPI(title="GeAccounting API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,7 +51,7 @@ async def on_startup():
             db.add(
                 AccountSet(
                     id=DEFAULT_ACCOUNT_SET_ID,
-                    company_name="示例科技有限公司（REA演示账套）",
+                    company_name="示例科技有限公司（GeAccounting演示账套）",
                     taxpayer_type="GENERAL",
                     accounting_standard="SMALL_ENT_2013",
                     start_period="2026-01",
