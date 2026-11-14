@@ -362,7 +362,7 @@ async def ingest_bank_statement_batch(
             tx_date=_month_end_dt(tx_d),
             direction=direction,
             amount=Decimal(str(-abs(amt) if is_red else amt)),
-            balance_after=Decimal(str(r["balance_after"])) if r["balance_after"] is not None else None,
+            balance_after=(Decimal(str(r["balance_after"])) if (r.get("balance_after") is not None and abs(Decimal(str(r["balance_after"]))) < Decimal("1e14")) else None),
             counterparty_name=cp,
             counterparty_account=cp_acct,
             raw_summary=raw_sum,
@@ -405,3 +405,4 @@ async def ingest_bank_statement_file(
         files=[(filename, content)],
     )
     return res["statements"]
+
