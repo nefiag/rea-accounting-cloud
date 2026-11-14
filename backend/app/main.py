@@ -387,3 +387,25 @@ async def api_export_financial_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=financial_statements_{period}.xlsx"},
     )
+
+
+import os
+import sys
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+if getattr(sys, 'frozen', False):
+    _base_dir = sys._MEIPASS
+else:
+    _base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+_frontend_dist = os.path.join(_base_dir, "frontend", "dist")
+if os.path.exists(_frontend_dist):
+    app.mount("/assets", StaticFiles(directory=os.path.join(_frontend_dist, "assets")), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        file_path = os.path.join(_frontend_dist, full_path)
+        if full_path and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(_frontend_dist, "index.html"))
