@@ -276,7 +276,7 @@ export const FinancialReports: React.FC<{
                     style={{ width: 320 }}
                     value={detailCode}
                     onChange={setDetailCode}
-                    options={accounts.map((a) => ({ value: a.code, label: `${a.code} ${a.name}` }))}
+                    options={accounts?.map((a) => ({ value: a.code, label: `${a.code} ${a.name}` }))}
                   />
                   <span>起始期间：</span>
                   <Input size="small" style={{ width: 95 }} value={startPeriod} onChange={(e) => setStartPeriod(e.target.value)} />
@@ -332,3 +332,4 @@ export const FinancialReports: React.FC<{
     </Card>
   );
 };
+

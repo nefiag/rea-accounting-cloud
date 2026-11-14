@@ -19,8 +19,8 @@ export const BankStatements: React.FC<{
   const pendingFilesRef = useRef<File[]>([]);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const leafAccounts = accounts.filter((a) => a.is_leaf !== false);
-  const defaultBankId = bankAccounts[0]?.id;
+  const leafAccounts = accounts?.filter((a) => a.is_leaf !== false);
+  const defaultBankId = bankAccounts?.[0]?.id;
 
   const fetchStatements = async () => {
     setLoading(true);
@@ -39,33 +39,45 @@ export const BankStatements: React.FC<{
   const flushBatchUpload = async () => {
     const batchFiles = [...pendingFilesRef.current];
     pendingFilesRef.current = [];
-    if (!batchFiles.length) return;
+    if (!batchFiles?.length) return;
 
-    const formData = new FormData();
-    formData.append('account_set_id', accountSetId);
-    formData.append('bank_account_id', defaultBankId);
-    formData.append('auto_generate_voucher', String(autoGenOnImport));
-    batchFiles.forEach((f) => {
-      formData.append('files', f);
-    });
+    let totalFiles = 0;
+    let totalParsed = 0;
+    let totalDedup = 0;
+    let totalVouchers = 0;
 
     try {
-      message.loading({
-        content: `AI Agent 正在批量解析 ${batchFiles.length} 份对账单并执行跨账户自动去重...`,
-        key: 'imp',
-        duration: 0,
-      });
-      const res = await api.post('/statements/import-batch', formData);
-      const { files_count, parsed_count, dedup_skipped, generated_vouchers_count } = res.data;
+      for (let i = 0; i < batchFiles.length; i++) {
+        const f = batchFiles[i];
+        message.loading({
+          content: `AI Agent 正在逐份解析对账单 (${i + 1}/${batchFiles.length}): ${f.name}...`,
+          key: 'imp',
+          duration: 0,
+        });
+        const formData = new FormData();
+        formData.append('account_set_id', accountSetId);
+        formData.append('bank_account_id', defaultBankId);
+        formData.append('auto_generate_voucher', String(autoGenOnImport));
+        formData.append('files', f);
+
+        const res = await api.post('/statements/import-batch', formData);
+        const { files_count, parsed_count, dedup_skipped, generated_vouchers_count } = res.data;
+        totalFiles += files_count || 1;
+        totalParsed += parsed_count || 0;
+        totalDedup += dedup_skipped || 0;
+        totalVouchers += generated_vouchers_count || 0;
+      }
+
       message.success({
-        content: `批量处理 ${files_count} 份文件：新入库 ${parsed_count} 条，自动去重 ${dedup_skipped} 条，生成凭证 ${generated_vouchers_count} 张！`,
+        content: `批量处理 ${totalFiles} 份文件：新入库 ${totalParsed} 条，自动去重 ${totalDedup} 条，生成凭证 ${totalVouchers} 张！`,
         key: 'imp',
         duration: 5,
       });
       fetchStatements();
-      if (generated_vouchers_count > 0) onVoucherGenerated();
+      if (totalVouchers > 0) onVoucherGenerated();
     } catch (err: any) {
-      message.error({ content: err.response?.data?.detail || err.message || '批量解析失败', key: 'imp' });
+      fetchStatements();
+      message.error({ content: err.response?.data?.detail || err.message || '批量解析中断', key: 'imp', duration: 6 });
     }
   };
 
@@ -86,7 +98,7 @@ export const BankStatements: React.FC<{
 
   const handleReverseGenerate = async (targetIds?: string[]) => {
     const ids = targetIds || (selectedRowKeys as string[]);
-    if (!ids.length) {
+    if (!ids?.length) {
       message.warning('请先勾选需要反向生成凭证的对账单流水');
       return;
     }
@@ -142,9 +154,9 @@ export const BankStatements: React.FC<{
           <Button
             icon={<ThunderboltOutlined />}
             onClick={() => handleReverseGenerate()}
-            disabled={!selectedRowKeys.length}
+            disabled={!selectedRowKeys?.length}
           >
-            数据库反向批量制证 ({selectedRowKeys.length})
+            数据库反向批量制证 ({selectedRowKeys?.length})
           </Button>
           <Button icon={<SyncOutlined />} onClick={fetchStatements} />
         </Space>
@@ -215,7 +227,7 @@ export const BankStatements: React.FC<{
                 value={code}
                 style={{ width: '100%' }}
                 onChange={(val) => handleSubjectChange(r.id, val)}
-                options={leafAccounts.map((a) => ({ value: a.code, label: `${a.code} ${a.name}` }))}
+                options={leafAccounts?.map((a) => ({ value: a.code, label: `${a.code} ${a.name}` }))}
               />
             ),
           },
@@ -253,5 +265,8 @@ export const BankStatements: React.FC<{
     </Card>
   );
 };
+
+
+
 
 

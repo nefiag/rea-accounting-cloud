@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { Card, Table, Input, Select, InputNumber, Button, DatePicker, Space, message, Tag, Divider } from 'antd';
 import { PlusOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -26,7 +26,7 @@ export const VoucherEditor: React.FC<{
   ]);
   const [saving, setSaving] = useState(false);
 
-  const leafAccounts = accounts.filter((a) => a.is_leaf);
+  const leafAccounts = accounts?.filter((a) => a.is_leaf);
   const totalDebit = rows.reduce((s, r) => s + Number(r.debit_amount || 0), 0);
   const totalCredit = rows.reduce((s, r) => s + Number(r.credit_amount || 0), 0);
 
@@ -61,14 +61,14 @@ export const VoucherEditor: React.FC<{
       next[idx].debit_amount = c;
       next[idx].credit_amount = d;
       setRows(next);
-    } else if (e.key === 'Enter' && idx === rows.length - 1) {
+    } else if (e.key === 'Enter' && idx === rows?.length - 1) {
       setRows([...rows, { key: String(Date.now()), summary: rows[idx].summary, account_code: '', debit_amount: 0, credit_amount: 0 }]);
     }
   };
 
   const handleSave = async () => {
-    const validEntries = rows.filter((r) => r.account_code && (r.debit_amount > 0 || r.credit_amount > 0));
-    if (validEntries.length < 2) {
+    const validEntries = rows?.filter((r) => r.account_code && (r.debit_amount > 0 || r.credit_amount > 0));
+    if (validEntries?.length < 2) {
       message.warning('请至少录入两条有效分录');
       return;
     }
@@ -83,7 +83,7 @@ export const VoucherEditor: React.FC<{
         period,
         voucher_word: voucherWord,
         voucher_date: voucherDate.format('YYYY-MM-DD'),
-        entries: validEntries.map((e) => ({
+        entries: validEntries?.map((e) => ({
           summary: e.summary || '日常业务记账',
           account_code: e.account_code,
           debit_amount: e.debit_amount,
@@ -119,7 +119,7 @@ export const VoucherEditor: React.FC<{
     >
       <Space style={{ marginBottom: 16 }}>
         <span>凭证字：</span>
-        <Select value={voucherWord} onChange={setVoucherWord} style={{ width: 80 }} options={['记', '收', '付', '转'].map((w) => ({ label: w, value: w }))} />
+        <Select value={voucherWord} onChange={setVoucherWord} style={{ width: 80 }} options={['记', '收', '付', '转']?.map((w) => ({ label: w, value: w }))} />
         <span>日期：</span>
         <DatePicker value={voucherDate} onChange={(d) => d && setVoucherDate(d)} />
         <span>会计期间：</span>
@@ -158,7 +158,7 @@ export const VoucherEditor: React.FC<{
                   (option?.searchText ?? '').toLowerCase().includes(input.toLowerCase())
                 }
                 onChange={(v) => updateRow(idx, 'account_code', v)}
-                options={leafAccounts.map((a) => ({
+                options={leafAccounts?.map((a) => ({
                   value: a.code,
                   label: `${a.code} ${a.name}`,
                   searchText: `${a.code} ${a.name} ${a.pinyin_abbr}`,
@@ -202,8 +202,8 @@ export const VoucherEditor: React.FC<{
                 type="text"
                 danger
                 icon={<DeleteOutlined />}
-                disabled={rows.length <= 2}
-                onClick={() => setRows(rows.filter((_, i) => i !== idx))}
+                disabled={rows?.length <= 2}
+                onClick={() => setRows(rows?.filter((_, i) => i !== idx))}
               />
             ),
           },
@@ -233,3 +233,4 @@ export const VoucherEditor: React.FC<{
     </Card>
   );
 };
+

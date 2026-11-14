@@ -37,14 +37,14 @@ export default function App() {
 
   useEffect(() => {
     if (ctx?.account_set) {
-      loadVouchers(ctx.account_set.id, ctx.account_set.current_period);
+      if (ctx?.account_set?.id) loadVouchers(ctx?.account_set?.id, ctx?.account_set?.current_period);
     }
   }, [ctx, refreshTick]);
 
   if (!ctx) return <div style={{ padding: 40 }}>正在初始化 REA 双核财务工作台...</div>;
 
-  const setId = ctx.account_set.id;
-  const period = ctx.account_set.current_period;
+  const setId = ctx?.account_set?.id;
+  const period = ctx?.account_set?.current_period;
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -70,8 +70,8 @@ export default function App() {
       <Layout>
         <Header style={{ background: '#fff', padding: '0 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f0f0f0', height: 52 }}>
           <Space>
-            <strong>{ctx.account_set.company_name}</strong>
-            <Tag color="blue">{ctx.account_set.taxpayer_type === 'GENERAL' ? '一般纳税人' : '小规模纳税人'}</Tag>
+            <strong>{ctx?.account_set?.company_name}</strong>
+            <Tag color="blue">{ctx?.account_set?.taxpayer_type === 'GENERAL' ? '一般纳税人' : '小规模纳税人'}</Tag>
             <Tag color="green">REA 双核驱动</Tag>
           </Space>
           <Space>
@@ -125,7 +125,7 @@ export default function App() {
                         {
                           title: '分录明细',
                           render: (_, r) =>
-                            r.entries.map((e: any) => (
+                            r.entries?.map((e: any) => (
                               <div key={e.id} style={{ fontSize: 12 }}>
                                 [{e.summary}] {e.account_code} — 借: {e.debit_amount.toFixed(2)} / 贷: {e.credit_amount.toFixed(2)}
                               </div>
@@ -168,3 +168,7 @@ export default function App() {
     </Layout>
   );
 }
+
+
+
+
